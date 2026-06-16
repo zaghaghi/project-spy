@@ -8,7 +8,7 @@ There are three ways to run it:
 
 | Form | Where | Model backend |
 |------|-------|---------------|
-| **Standalone desktop app** | Tauri window | in-process llama.cpp, model bundled inside the app |
+| **Standalone desktop app** | Tauri window | in-process llama.cpp, model downloaded on first use |
 | **Web app** | browser | LM Studio (or any Anthropic-compatible endpoint) |
 | **Python CLI** | terminal | LM Studio |
 
@@ -21,7 +21,7 @@ the **standalone desktop app**.
 Everything is in one Rust process. On launch the Tauri app:
 
 1. Shows the **"spy brain" picker** (the spy is dead; you load a reconstruction of
-   his mind). You choose a fidelity — a QAT GGUF of gemma-4 (E2B / E4B / 12B).
+   his mind). You choose a fidelity — a QAT GGUF of gemma-4 (E2B or E4B).
 2. **Downloads the chosen brain** from HuggingFace on first use (cached in
    `~/.project-spy/brains/`), with a progress screen.
 3. Loads it via [llama-cpp-2](https://crates.io/crates/llama-cpp-2) (Rust binding
@@ -39,13 +39,15 @@ cache warm across turns, so only new tokens are decoded (prompt caching).
 ```
 project-spy/
   src-tauri/         # the whole desktop app
+    src/lib.rs       # engine + server crate (Engine, axum router)
+    src/main.rs      # Tauri shell: starts engine + server, loads the UI
     src/brains.rs    # the "spy brain" catalog (QAT GGUF repos) + HF download paths
     src/inference.rs # llama.cpp engine: download, load, Gemma chat template, sampling
-    src/server.rs    # axum: /health, /brains, /load, /v1/messages (CORS)
-    src/main.rs      # Tauri shell: starts engine + server, loads the UI
+    src/server.rs    # axum: /health, /status, /brains, /load, /v1/messages (CORS)
     examples/serve.rs# run the server headless (SPY_BRAIN=<id> to auto-load)
   web/               # React + TypeScript UI and the game engine (the referee)
-  spyengine/         # original Python engine (reference) + cases/, play.py
+  cases/             # the case ledgers (courier, vienna) — shared by all front-ends
+  .project-spy/      # (gitignored) local data: downloaded brains, Python reference engine
 ```
 
 ## The brains (QAT models)
@@ -103,10 +105,9 @@ npm run build      # builds web/dist, compiles the app
 Output: `src-tauri/target/release/bundle/macos/Project Spy.app` (small — **no model
 inside**; the brain is downloaded on first run into `~/.project-spy/brains/`).
 
-The default bundle target is `app`. The `.dmg` step (`bundle_dmg.sh`) drives
-Finder via AppleScript and only works from a logged-in **GUI** Terminal session;
-to also make a `.dmg`, run `npx tauri build --bundles dmg` there. Regenerate
-icons with `npx tauri icon <path-to-1024px.png>`.
+The default bundle target is `app`. To also produce a `.dmg`, run
+`npx tauri build --bundles dmg` (Tauri 2 ships a DMG bundler; no shell script
+needed). Regenerate icons with `npx tauri icon <path-to-1024px.png>`.
 
 ## Server env vars (optional)
 
@@ -143,7 +144,11 @@ directly at 3.2 GB, so `llama-cpp-2` is the only compact, self-contained path.
 
 ## Python CLI (reference implementation)
 
+The Python engine lives under `.project-spy/` (gitignored — it's the source of
+truth the TypeScript port and the Rust referee were written from).
+
 ```bash
+cd .project-spy
 python3 play.py --case vienna --debug    # needs LM Studio on :1234
 python3 tests_referee.py                 # deterministic referee tests
 ```
