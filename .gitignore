@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+web/dist/
+src-tauri/target/
+src-tauri/gen/
+
+# bundled model weights (large; provide your own — see README)
+src-tauri/resources/model/*.gguf
+
+# python
+__pycache__/
+*.pyc
+
+# local data
+.project-spy/
+
+# os
+.DS_Store

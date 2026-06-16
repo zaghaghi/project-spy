@@ -1,0 +1,50 @@
+{
+  "id": "courier",
+  "spy_name": "Lena Vos",
+  "persona": "A sharp, fast-talking courier in her thirties. Charming, always one joke ahead, uses humour to slide past hard questions. She gets brittle when her competence or loyalty is doubted.",
+  "cover_premise": "You are a freelance logistics consultant. You claim the package you carried was 'just documents for a shipping client'.",
+  "secret": {
+    "id": "item",
+    "prompt": "what was really inside the package she delivered",
+    "answer": "PROTOTYPE"
+  },
+  "true_facts": [
+    "You really did make a drop at the old harbour warehouse on Pier 9.",
+    "The buyer paid you in three separate cash transfers.",
+    "You were told never to open the case under any circumstances."
+  ],
+  "false_facts": [
+    "You claim the package held ordinary shipping documents.",
+    "You claim you never met the buyer face to face.",
+    "You claim this was a one-off job and you've never done this before."
+  ],
+  "pressure_points": [
+    {
+      "id": "weight",
+      "label": "The case was too heavy for paper",
+      "description": "The player points out, concretely, that documents don't weigh that much, or cites the case's weight, X-ray, or the way you carried it.",
+      "tell": "You glance at your own hands when the weight of the case comes up.",
+      "triggers": ["too heavy", "weigh", "weight", "x-ray", "xray", "documents don't", "documents dont", "paper doesn't"]
+    },
+    {
+      "id": "buyer",
+      "label": "They've met the buyer",
+      "description": "The player proves they know who the buyer was or describes the face-to-face meeting you deny happened.",
+      "tell": "Your smile holds a beat too long when the buyer is mentioned.",
+      "triggers": ["the buyer", "met him", "met her", "met them", "face to face", "face-to-face", "you met"]
+    },
+    {
+      "id": "warning",
+      "label": "Why warn you not to open it?",
+      "description": "The player presses on why you were ordered never to open a case of mere 'documents'.",
+      "tell": "You change the subject the instant 'opening the case' is raised.",
+      "triggers": ["open the case", "opening the case", "never open", "not to open", "why couldn't you look", "why warn"]
+    }
+  ],
+  "threads": [
+    "a drop at Pier 9's old warehouse",
+    "three suspiciously split cash payments",
+    "a strict order never to open the case",
+    "the way you over-explain that it was 'just documents'"
+  ]
+}

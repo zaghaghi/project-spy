@@ -1,0 +1,15 @@
+{
+  "name": "project-spy",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone interrogation game: a Tauri app with an in-process llama.cpp engine and a React UI.",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "web": "npm --prefix web run dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}
