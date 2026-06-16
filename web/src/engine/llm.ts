@@ -1,14 +1,15 @@
 // Client for a local Anthropic-compatible /v1/messages endpoint. In the bundled
-// app this is the node-llama-cpp sidecar; the same client also works against
-// LM Studio. Local models rarely honor a strict JSON mode, so we ask for raw
-// JSON and extract it defensively.
+// desktop app this is the in-process axum server in src-tauri (which proxies
+// to llama-cpp-2 on Metal); the same client also works against LM Studio.
+// Local models rarely honor a strict JSON mode, so we ask for raw JSON and
+// extract it defensively.
 
 import type { ChatMessage } from "./types";
 
 export const DEFAULT_MODEL = "gemma-4-e2b";
 
-// Where the inference server lives. The sidecar binds here; override for a
-// remote/LM-Studio setup with VITE_SPY_BACKEND at build/dev time.
+// Where the inference server lives. The Tauri shell binds here; override for
+// a remote/LM-Studio setup with VITE_SPY_BACKEND at build/dev time.
 export const SIDECAR_BASE =
   (import.meta.env.VITE_SPY_BACKEND as string | undefined) || "http://127.0.0.1:8787";
 
@@ -62,12 +63,12 @@ export async function loadBrain(id: string, baseUrl: string = SIDECAR_BASE): Pro
 export class LLMError extends Error {}
 
 export interface LLMConfig {
-  baseUrl?: string; // default: the sidecar
+  baseUrl?: string; // default: the local inference server
   model?: string;
   apiKey?: string;
 }
 
-/** Poll the sidecar's readiness/progress. Returns null if it's unreachable. */
+/** Poll the local server's readiness/progress. Returns null if it's unreachable. */
 export async function fetchStatus(baseUrl: string = SIDECAR_BASE): Promise<ServerStatus | null> {
   try {
     const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/health`);
