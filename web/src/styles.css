@@ -55,14 +55,13 @@ body {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 280px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 18px;
   min-height: 0;
   padding: 16px 0;
 }
 .left { display: flex; flex-direction: column; min-height: 0; }
-.right { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; padding-right: 2px; }
-.right::-webkit-scrollbar { width: 8px; }
-.right::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.right { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; padding-right: 2px; }
 
 /* transcript */
 .transcript {
@@ -154,7 +153,25 @@ button.ghost { background: transparent; }
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px;
+  min-height: 0;
 }
+/* evidence panel — takes the remaining space and scrolls its leads list */
+.panel.evidence {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.leads-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 2px;
+  padding-right: 4px;
+}
+.leads-scroll::-webkit-scrollbar { width: 8px; }
+.leads-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 .panel h3 {
   margin: 0 0 10px;
   font-size: 11px;

@@ -11,19 +11,19 @@ export function EvidencePanel({
   const hit = new Set(snapshot.pressurePointsHit);
   return (
     <>
-      <div className="panel">
+      <div className="panel evidence">
         <h3>Leads</h3>
         {snapshot.leads.length === 0 ? (
           <div className="empty">Nothing to pull on yet. Get them talking.</div>
         ) : (
-          <>
+          <div className="leads-scroll">
             <div className="leads-hint">Loose threads worth pushing on:</div>
             <ul className="leads">
               {snapshot.leads.map((l, i) => (
                 <li key={i}>{l}</li>
               ))}
             </ul>
-          </>
+          </div>
         )}
       </div>
 
