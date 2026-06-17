@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: project-spy-macos
+            bundles: app,dmg
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: project-spy-windows
+            bundles: msi
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: project-spy-linux
+            bundles: appimage,deb
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libwebkit2gtk-4.1-dev \
+            file \
+            wget \
+            dpkg-dev \
+            fakeroot \
+            binutils
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies (root)
+        run: npm ci
+
+      - name: Install npm dependencies (web)
+        working-directory: web
+        run: npm ci
+
+      - name: Build (Tauri)
+        run: npx tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            src-tauri/target/release/bundle/macos/**
+            src-tauri/target/release/bundle/dmg/**
+            src-tauri/target/release/bundle/msi/**
+            src-tauri/target/release/bundle/appimage/**
+            src-tauri/target/release/bundle/deb/**
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Upload installers to release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Upload installers to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/project-spy-macos/**
+            artifacts/project-spy-windows/**
+            artifacts/project-spy-linux/**
+          fail_on_unmatched_files: false
+          generate_release_notes: false
