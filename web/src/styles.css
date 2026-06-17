@@ -1,12 +1,12 @@
 :root {
-  --bg: #0d0f12;
-  --bg-panel: #14171c;
-  --bg-elev: #1b1f26;
-  --line: #2a2f38;
-  --ink: #d7dae0;
-  --ink-dim: #8a909c;
-  --ink-faint: #5b616d;
-  --spy: #e8c98a;       /* warm amber — the spy */
+  --bg: #021c33;        /* icon navy — base */
+  --bg-panel: #06273e;  /* navy, lifted one step */
+  --bg-elev: #0d3a58;   /* navy, interactive controls */
+  --line: #1c4a6b;      /* navy border */
+  --ink: #d8e1ea;
+  --ink-dim: #8a98a8;
+  --ink-faint: #5a6775;
+  --spy: #faad03;       /* logo gold — the spy */
   --player: #7fb2e8;    /* cold blue — the interrogator */
   --accent: #d9534f;    /* interrogation red */
   --ok: #6fbf73;
@@ -20,7 +20,7 @@ html, body, #root { height: 100%; margin: 0; }
 
 body {
   background:
-    radial-gradient(1200px 600px at 50% -10%, #181c22 0%, var(--bg) 60%);
+    radial-gradient(1200px 600px at 50% -10%, #08395e 0%, var(--bg) 60%);
   color: var(--ink);
   font-family: var(--font);
   font-size: 14px;

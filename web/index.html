@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
     <title>Project Spy — Interrogation</title>
+    <!-- Paint navy on first frame, before the bundled CSS loads (no white flash). -->
+    <style>
+      html, body { background: #021c33; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

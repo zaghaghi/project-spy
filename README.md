@@ -4,19 +4,15 @@ A **Player vs Language Model** interrogation game. You question a captured spy
 and must break their will until they confess a secret you already know. The
 break must be *earned* — catch them in lies and hit their pressure points.
 
-There are three ways to run it:
+Project Spy is a **standalone macOS desktop app** (Tauri). Everything runs
+locally in one process: the spy's "brain" is a quantized Gemma model loaded
+in-process via llama.cpp on the Metal GPU — no cloud, no API keys.
 
-| Form | Where | Model backend |
-|------|-------|---------------|
-| **Standalone desktop app** | Tauri window | in-process llama.cpp, model downloaded on first use |
-| **Web app** | browser | LM Studio (or any Anthropic-compatible endpoint) |
-| **Python CLI** | terminal | LM Studio |
+<p align="center">
+  <img src="images/screenshot.png" alt="Project Spy — interrogating a captured spy" width="820">
+</p>
 
-The game design and anti-cheat architecture ("the app is the referee, the model
-only acts") are documented in [web/README.md](web/README.md). This file covers
-the **standalone desktop app**.
-
-## Standalone app — what it does
+## What it does
 
 Everything is in one Rust process. On launch the Tauri app:
 
@@ -26,15 +22,19 @@ Everything is in one Rust process. On launch the Tauri app:
    `~/.project-spy/brains/`), with a progress screen.
 3. Loads it via [llama-cpp-2](https://crates.io/crates/llama-cpp-2) (Rust binding
    to llama.cpp) with **Metal GPU**, and runs a tiny in-process
-   [axum](https://crates.io/crates/axum) server on `127.0.0.1:8787` exposing the
-   **same Anthropic `/v1/messages`** the web engine speaks, plus `/health`,
-   `/brains`, and `/load`.
+   [axum](https://crates.io/crates/axum) server on `127.0.0.1:8787` exposing an
+   Anthropic-compatible `/v1/messages` (plus `/health`, `/brains`, `/load`) that
+   the bundled UI talks to.
 4. Drops into the game once the brain is ready.
 
-No Node, no Python, no MLX runtime. llama.cpp objects live on a dedicated worker
-thread (they aren't `Sync`); the async server talks to it over a channel and
-serializes turns (the game is single-user). The persistent context keeps its KV
-cache warm across turns, so only new tokens are decoded (prompt caching).
+The anti-cheat design is **"the app is the referee, the model only acts"**: a
+deterministic engine scores every answer, tracks pressure points, and decides
+when the spy breaks — the model never adjudicates its own defeat.
+
+llama.cpp objects live on a dedicated worker thread (they aren't `Sync`); the
+async server talks to it over a channel and serializes turns (the game is
+single-user). The persistent context keeps its KV cache warm across turns, so
+only new tokens are decoded (prompt caching).
 
 ```
 project-spy/
@@ -45,9 +45,9 @@ project-spy/
     src/inference.rs # llama.cpp engine: download, load, Gemma chat template, sampling
     src/server.rs    # axum: /health, /status, /brains, /load, /v1/messages (CORS)
     examples/serve.rs# run the server headless (SPY_BRAIN=<id> to auto-load)
-  web/               # React + TypeScript UI and the game engine (the referee)
-  cases/             # the case ledgers (courier, vienna) — shared by all front-ends
-  .project-spy/      # (gitignored) local data: downloaded brains, Python reference engine
+  web/               # React + TypeScript UI (bundled into the app) + the referee engine
+  cases/             # the case ledgers (courier, vienna)
+  .project-spy/      # (gitignored) local data: downloaded brains
 ```
 
 ## The brains (QAT models)
@@ -80,19 +80,13 @@ npm --prefix web install
 npm run dev            # = tauri dev: builds llama.cpp (first time is slow), launches the window
 ```
 
-**Run the real server headless and curl it** (the `/brains` → `/load` → game flow):
+**Run the backend server headless and curl it** (the `/brains` → `/load` → game flow):
 
 ```bash
 cd src-tauri
-cargo run --release --example serve -p project-spy        # idle; pick via /load
+cargo run --release --example serve -p project-spy                     # idle; pick via /load
 SPY_BRAIN=partial cargo run --release --example serve -p project-spy   # auto-load E2B
 # then:  curl :8787/brains  ·  curl -XPOST :8787/load -d '{"id":"partial"}'  ·  curl :8787/health
-```
-
-Or point the web UI at any Anthropic endpoint instead of the Rust server:
-
-```bash
-VITE_SPY_BACKEND=http://127.0.0.1:1234 npm --prefix web run dev   # e.g. LM Studio
 ```
 
 ## Build a distributable
@@ -114,9 +108,7 @@ needed). Regenerate icons with `npx tauri icon <path-to-1024px.png>`.
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `SPY_PORT` / `SPY_HOST` | `8787` / `127.0.0.1` | bind address (in [server.rs](src-tauri/src/server.rs)) |
-
-The web UI targets `http://127.0.0.1:8787`; override with `VITE_SPY_BACKEND` at
-build/dev time.
+| `SPY_FAKE_RAM_BYTES` | — | override reported RAM to test the memory-fit warning |
 
 ## Status / verified
 
@@ -127,8 +119,8 @@ Verified on macOS arm64 (Apple Silicon):
 - `/brains` → `/load partial` downloads the 3.35 GB QAT E2B from HuggingFace with
   live progress, loads it on **Metal GPU**, and `/v1/messages` returns valid
   in-character JSON.
-- The full UI flow (brain picker → download/load gate → interrogation) works in
-  the browser preview against the real server.
+- The full UI flow (brain picker → download/load gate → interrogation) works
+  end-to-end against the in-process server.
 - **Prompt caching**: a warm follow-up turn is ~6× faster than a cold one
   (persistent context + prefix KV reuse).
 
@@ -139,19 +131,3 @@ architecture gemma4`; MLX → unsupported quant + text-only export missing visio
 tensors; Google QAT-mobile → `Unknown quantization method: gemma`; UQFF works but
 needs a shared 7 GB residual (~8 GB bundle). llama.cpp supports `gemma4` GGUF
 directly at 3.2 GB, so `llama-cpp-2` is the only compact, self-contained path.
-
----
-
-## Python CLI (reference implementation)
-
-The Python engine lives under `.project-spy/` (gitignored — it's the source of
-truth the TypeScript port and the Rust referee were written from).
-
-```bash
-cd .project-spy
-python3 play.py --case vienna --debug    # needs LM Studio on :1234
-python3 tests_referee.py                 # deterministic referee tests
-```
-
-The "code is the referee" scoring model, pressure points, and case design are
-shared by all three front-ends.
