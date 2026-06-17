@@ -34,12 +34,16 @@ jobs:
 
       - name: Set macOS deployment target
         if: runner.os == 'macOS'
-        # GHA macOS runners reset MACOSX_DEPLOYMENT_TARGET; force it. rustc and
-        # the cc/cmake build of llama.cpp all honor this env var for both compile
-        # and link, so the deployment target is applied without passing the
-        # clang-only -mmacosx-version-min flag through RUSTFLAGS (rustc rejects it).
+        # Pin the macOS deployment target to 11.0:
+        #   - MACOSX_DEPLOYMENT_TARGET -> rustc and the linker.
+        #   - CMAKE_OSX_DEPLOYMENT_TARGET -> the CMake build of llama.cpp/ggml.
+        #     llama-cpp-sys forwards CMAKE_* env vars as -D defines; without this,
+        #     ggml compiles below 10.15 and fails (std::filesystem unavailable).
+        # We deliberately don't pass -mmacosx-version-min via RUSTFLAGS (rustc
+        # rejects that clang-only flag).
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+          echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
       - name: Import macOS signing certificate
         if: runner.os == 'macOS'
