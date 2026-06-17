@@ -32,6 +32,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set macOS deployment target
+        if: runner.os == 'macOS'
+        # GHA macOS runners reset MACOSX_DEPLOYMENT_TARGET; force it for both
+        # compile (clang frontend) and link (clang -mmacosx-version-min).
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-mmacosx-version-min=11.0" >> $GITHUB_ENV
+
       - name: Install Linux build deps
         if: runner.os == 'Linux'
         run: |
