@@ -204,12 +204,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
+          # Only the distributable installers — NOT the unpacked bundle trees
+          # (the macOS .app, the AppImage AppDir, the deb's data tree), whose
+          # files would otherwise be uploaded individually to the release.
           path: |
-            src-tauri/target/release/bundle/macos/**
-            src-tauri/target/release/bundle/dmg/**
-            src-tauri/target/release/bundle/msi/**
-            src-tauri/target/release/bundle/appimage/**
-            src-tauri/target/release/bundle/deb/**
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -228,8 +230,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/project-spy-macos/**
-            artifacts/project-spy-windows/**
-            artifacts/project-spy-linux/**
+            artifacts/**/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
           fail_on_unmatched_files: false
           generate_release_notes: false
