@@ -24,6 +24,14 @@ use crate::brains::{self, Brain};
 
 const N_CTX: u32 = 8192;
 
+// Reserve this many tokens of the context window for generation so a prompt
+// that fills the window never reaches decode and triggers ggml_abort (a hard
+// SIGABRT from inside llama.cpp that Rust can't catch). A prompt over this
+// budget returns a clean Err that surfaces in the UI as game.error instead of
+// crashing the process.
+const GEN_RESERVE: u32 = 1024;
+const MAX_PROMPT_TOKENS: u32 = N_CTX - GEN_RESERVE;
+
 #[derive(Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Phase {
@@ -333,8 +341,12 @@ fn generate(
     let tokens = model
         .str_to_token(prompt, AddBos::Always)
         .map_err(|e| format!("tokenize: {e}"))?;
-    if tokens.len() as u32 >= N_CTX {
-        return Err("prompt longer than context window".to_string());
+    if tokens.len() as u32 > MAX_PROMPT_TOKENS {
+        return Err(format!(
+            "prompt too long for context window: {} tokens (max {}); trim the conversation",
+            tokens.len(),
+            MAX_PROMPT_TOKENS
+        ));
     }
 
     let mut p = 0usize;

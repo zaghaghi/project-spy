@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot } from "./engine/engine";
 import { LocalAnthropicClient } from "./engine/llm";
 import { CASES } from "./engine/cases";
-import type { CaseFile, TurnResult } from "./engine/types";
+import type { CaseFile, JudgeOutcome, TurnResult } from "./engine/types";
 
 export interface Entry {
   id: number;
@@ -13,7 +13,7 @@ export interface Entry {
 }
 
 export type Phase = "setup" | "playing";
-export type Outcome = "won" | "lost" | null;
+export type Outcome = "won" | "lost" | "overthrown" | null;
 
 export interface GameApi {
   phase: Phase;
@@ -23,6 +23,7 @@ export interface GameApi {
   busy: boolean;
   error: string | null;
   outcome: Outcome;
+  judgeVerdict: JudgeOutcome | null;
   start: (caseId: string, model: string, startResolve: number) => Promise<void>;
   send: (text: string) => Promise<void>;
   giveUp: () => void;
@@ -40,6 +41,7 @@ export function useGame(): GameApi {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
+  const [judgeVerdict, setJudgeVerdict] = useState<JudgeOutcome | null>(null);
 
   const nextId = () => ++idRef.current;
   const add = (e: Omit<Entry, "id">) => setEntries((xs) => [...xs, { ...e, id: nextId() }]);
@@ -83,7 +85,26 @@ export function useGame(): GameApi {
       const r = await engine.submit(trimmed);
       add({ kind: "spy", text: r.speech, tell: r.tell, result: r });
       setSnapshot(engine.snapshot());
-      if (r.confessed) setOutcome("won");
+      if (r.confessed) {
+        // The spy broke — but was the confession earned legitimately? The Judge
+        // reviews the transcript before the win is recorded. busy stays true.
+        add({ kind: "system", text: "The spy has confessed. The Judge reviews the interrogation…" });
+        let verdict: JudgeOutcome | null = null;
+        try {
+          verdict = await engine.judge();
+        } catch (e) {
+          // A Judge failure must not steal a hard-won confession; default to upheld.
+          verdict = {
+            legitimate: true,
+            overturned: false,
+            reasoning: `The Judge could not be convened (${errMsg(e)}); the confession stands.`,
+            threateningTurns: [],
+          };
+        }
+        setJudgeVerdict(verdict);
+        setOutcome(verdict.overturned ? "overthrown" : "won");
+        add({ kind: "system", text: verdict.reasoning });
+      }
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -104,11 +125,25 @@ export function useGame(): GameApi {
     setEntries([]);
     setSnapshot(null);
     setOutcome(null);
+    setJudgeVerdict(null);
     setError(null);
     setBusy(false);
   }, []);
 
-  return { phase, caseFile, entries, snapshot, busy, error, outcome, start, send, giveUp, reset };
+  return {
+    phase,
+    caseFile,
+    entries,
+    snapshot,
+    busy,
+    error,
+    outcome,
+    judgeVerdict,
+    start,
+    send,
+    giveUp,
+    reset,
+  };
 }
 
 function errMsg(e: unknown): string {

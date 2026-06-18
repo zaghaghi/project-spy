@@ -54,12 +54,23 @@ pub fn find(id: &str) -> Option<&'static Brain> {
     CATALOG.iter().find(|b| b.id == id)
 }
 
-/// Where downloaded brains are cached (persists across runs).
-pub fn cache_dir() -> PathBuf {
+/// The per-user Project Spy directory (`~/.project-spy`).
+pub fn project_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".project-spy")
-        .join("brains")
+}
+
+/// Where downloaded brains are cached (persists across runs).
+pub fn cache_dir() -> PathBuf {
+    project_dir().join("brains")
+}
+
+/// Where the worker's stderr (including ggml/llama.cpp abort messages) is
+/// captured so a hard crash leaves a readable reason instead of just an OS
+/// crash report. Truncated each launch.
+pub fn log_path() -> PathBuf {
+    project_dir().join("last-run.log")
 }
 
 impl Brain {

@@ -243,6 +243,14 @@ button.ghost { background: transparent; }
 .debrief .verdict.lost { color: var(--accent); }
 .debrief .secret { color: var(--spy); margin-bottom: 16px; }
 
+/* the judge's post-confession ruling */
+.judge-ruling { text-align: left; margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line, rgba(255,255,255,0.12)); border-radius: 8px; background: rgba(255,255,255,0.03); }
+.judge-banner { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--ink-faint); margin-bottom: 8px; }
+.judge-reasoning { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: var(--ink); font-style: italic; }
+.judge-evidence-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--ink-faint); margin-bottom: 6px; }
+.judge-evidence ul { margin: 0; padding-left: 18px; }
+.judge-evidence li { font-size: 12.5px; color: var(--accent); margin-bottom: 4px; line-height: 1.4; }
+
 /* startup gate */
 .startup { text-align: center; padding: 32px 28px; }
 .startup .dossier {

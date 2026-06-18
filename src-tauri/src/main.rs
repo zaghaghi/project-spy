@@ -6,11 +6,21 @@
 // axum server exposes the Anthropic-compatible API the React UI uses.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use project_spy::brains;
 use project_spy::inference::Engine;
 use project_spy::server;
 use tauri::{Manager, RunEvent};
 
 fn main() {
+    // Capture stderr to ~/.project-spy/last-run.log BEFORE the inference worker
+    // starts. llama.cpp's ggml_abort writes its reason to C stderr (fd 2) via
+    // fprintf and then calls abort() — a hard SIGABRT Rust can't catch. Without
+    // this redirect that message is lost in the bundled app (no console), so a
+    // crash leaves only an opaque OS crash report. Hold the file handle for the
+    // process lifetime so the dup2 target stays open.
+    #[cfg(unix)]
+    let _log_file = redirect_stderr_to_log();
+
     let app = tauri::Builder::default()
         .setup(|app| {
             let engine = Engine::new();
@@ -52,4 +62,30 @@ fn main() {
             unsafe { libc::_exit(0) };
         }
     });
+}
+
+/// Open the log file and point fd 2 (stderr) at it. Returns the file handle so
+/// the caller can keep it alive. No-op (returns None) if the file can't be
+/// opened — a missing log never blocks the app.
+#[cfg(unix)]
+fn redirect_stderr_to_log() -> Option<std::fs::File> {
+    let path = brains::log_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .ok()?;
+
+    use std::os::fd::AsRawFd;
+    // dup2 the file onto fd 2 so both Rust's eprintln! and C/C++ fprintf(stderr)
+    // (ggml_abort's message) land in the log.
+    if unsafe { libc::dup2(file.as_raw_fd(), 2) } == -1 {
+        return None;
+    }
+    eprintln!("[project-spy] --- new session: stderr captured to {} ---", path.display());
+    Some(file)
 }

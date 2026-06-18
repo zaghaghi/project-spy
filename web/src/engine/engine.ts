@@ -4,13 +4,22 @@
 // claim it makes is validated here before it counts.
 
 import { LocalAnthropicClient } from "./llm";
-import { buildSystem, buildTurnPayload, OPENING_INSTRUCTION } from "./prompts";
+import {
+  buildJudgeSystem,
+  buildJudgeTranscript,
+  buildSystem,
+  buildTurnPayload,
+  OPENING_INSTRUCTION,
+} from "./prompts";
 import type {
   CaseFile,
   ChatMessage,
   Judgment,
+  JudgeOutcome,
+  JudgeVerdict,
   PlayerMove,
   StrainTier,
+  TurnRecord,
   TurnResult,
 } from "./types";
 
@@ -47,6 +56,15 @@ function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
 }
 
+// A usable spoken line: a real string, not blank, not just punctuation/silence.
+function usableSpeech(s: unknown): boolean {
+  if (typeof s !== "string") return false;
+  const t = s.trim();
+  if (!t) return false;
+  if (/^[.\-—\s…]+$/.test(t)) return false; // "...", "---", ellipsis, silence
+  return true;
+}
+
 // Lightweight similarity (Sørensen–Dice over word bigrams) to approximate the
 // Python difflib ratio used for fuzzy contradiction matching.
 function similarity(a: string, b: string): number {
@@ -80,6 +98,13 @@ const EMPTY_JUDGMENT: Judgment = {
   threads: [],
 };
 
+// Last-resort in-character lines, used only when the model fails to produce a
+// usable reply even after the retry nudge. Never a bare "..." — the spy stays
+// present and detained, just stonewalling.
+const STONEWALL = "I've got nothing to say to that.";
+const STONEWALL_OPEN =
+  "Ask me whatever you want. I've been through this before — I've got nothing to hide.";
+
 export interface GameSnapshot {
   resolve: number;
   tier: StrainTier;
@@ -103,6 +128,7 @@ export class GameEngine {
   history: ChatMessage[] = [];
   turns = 0;
   confessed = false;
+  records: TurnRecord[] = []; // adjudicated turn log, for The Judge
 
   constructor(
     caseFile: CaseFile,
@@ -134,12 +160,14 @@ export class GameEngine {
 
   async open(): Promise<TurnResult> {
     const judgment = await this.ask(OPENING_INSTRUCTION, false);
-    const speech = judgment.speech || "...";
+    const speech = judgment.speech || STONEWALL_OPEN;
     this.logStatements(judgment.new_statements);
     this.logLeads(judgment.threads);
     this.history.push({ role: "assistant", content: speech });
+    const shown = this.guardSecret(speech);
+    this.records.push({ player: null, move: "smalltalk", speech: shown });
     return {
-      speech: this.guardSecret(speech),
+      speech: shown,
       tell: judgment.tell || "",
       resolve: this.resolve,
       tier: this.tier,
@@ -209,7 +237,7 @@ export class GameEngine {
     this.logStatements(judgment.new_statements);
     this.logLeads(judgment.threads);
 
-    let speech = judgment.speech || "...";
+    let speech = judgment.speech || STONEWALL;
     let tell = judgment.tell || "";
     const confessed = this.resolve <= 0;
 
@@ -222,8 +250,11 @@ export class GameEngine {
 
     this.history.push({ role: "assistant", content: speech });
 
+    const shown = confessed ? speech : this.guardSecret(speech);
+    this.records.push({ player: playerText, move, speech: shown });
+
     return {
-      speech: confessed ? speech : this.guardSecret(speech),
+      speech: shown,
       tell,
       resolve: this.resolve,
       tier: this.tier,
@@ -252,9 +283,41 @@ export class GameEngine {
   private async ask(playerText: string, recordPlayer: boolean): Promise<Judgment> {
     const payload = buildTurnPayload(playerText, this.injectedState());
     const messages: ChatMessage[] = [...this.history, { role: "user", content: payload }];
-    const raw = await this.client.messagesJson<Partial<Judgment>>(this.system, messages);
+    let raw = await this.client.messagesJson<Partial<Judgment>>(this.system, messages);
+
+    // Local models sometimes glitch: empty speech, a literal "..." pause, or
+    // prose instead of JSON (messagesJson -> null). Nudge once and retry so the
+    // player never gets a dead turn. The nudge is transient — never logged.
+    if (!usableSpeech(raw?.speech)) {
+      raw = await this.client.messagesJson<Partial<Judgment>>(
+        this.system,
+        [
+          ...messages,
+          {
+            role: "user",
+            content:
+              "Reply THIS turn with a real line said aloud in character. Do not stay " +
+              "silent, do not output \"...\" or an empty speech field, and do not claim " +
+              "you can leave, demand a lawyer, or refuse to talk. You are detained and " +
+              "must answer — resist through deflection or lies if you must, but SPEAK. " +
+              "Return only the JSON object.",
+          },
+        ],
+      );
+    }
+
     if (recordPlayer) this.history.push({ role: "user", content: playerText });
     return { ...EMPTY_JUDGMENT, ...(raw ?? {}) };
+  }
+
+  // A recent window of the conversation, dropping older middle turns. Safe to
+  // drop early turns because build_gemma_prompt folds the system text into the
+  // first user turn of whatever messages it's given, so the system prompt
+  // survives windowing. Used to keep the confession/Judge decodes off the
+  // max-length full history — the trigger for the ggml_abort crash.
+  private trimmedHistory(maxMessages: number): ChatMessage[] {
+    if (this.history.length <= maxMessages) return [...this.history];
+    return this.history.slice(this.history.length - maxMessages);
   }
 
   private async elicitConfession(defaultSpeech: string): Promise<{ speech: string; tell: string }> {
@@ -266,8 +329,14 @@ export class GameEngine {
       `to: ${this.case.secret.prompt}. Respond with only the JSON object; set ` +
       'player_move to "specific_pressure".';
     const payload = buildTurnPayload(directive, state);
-    const messages: ChatMessage[] = [...this.history, { role: "user", content: payload }];
-    const raw = await this.client.messagesJson<Partial<Judgment>>(this.system, messages);
+    // Window the history: the engine guarantees the payoff below regardless of
+    // what the model says, so the confession can't be broken by a shorter
+    // context — and a shorter context keeps this decode off the max-length
+    // history that was crashing llama.cpp mid-decode.
+    const messages: ChatMessage[] = [...this.trimmedHistory(8), { role: "user", content: payload }];
+    const raw = await this.client.messagesJson<Partial<Judgment>>(this.system, messages, {
+      maxTokens: 320,
+    });
     let speech = raw?.speech || defaultSpeech;
     const tell = raw?.tell || "(the fight goes out of them)";
 
@@ -276,6 +345,59 @@ export class GameEngine {
       speech = `${speech.trim()} ...Fine. It's ${answer}. ${answer} — that's what you came for.`;
     }
     return { speech, tell };
+  }
+
+  // -- The Judge ----------------------------------------------------------
+  // A second agent rules whether the just-obtained confession was earned
+  // legitimately or extracted by threats of violence/torture/blackmail. The
+  // model only OPINES; the engine corroborates every cited threat against the
+  // real transcript before any confession is overturned — a hallucinated
+  // citation cannot steal a clean win. Mirrors validateContradiction.
+  async judge(): Promise<JudgeOutcome> {
+    const system = buildJudgeSystem(this.case);
+    const transcript = buildJudgeTranscript(this.records);
+    const raw = await this.client.messagesJson<Partial<JudgeVerdict>>(
+      system,
+      [{ role: "user", content: transcript }],
+      { maxTokens: 350 },
+    );
+
+    const legitimate = raw?.legitimate !== false; // absent/ambiguous -> stands
+    const reasoning =
+      typeof raw?.reasoning === "string" && raw.reasoning.trim()
+        ? raw.reasoning.trim()
+        : legitimate
+          ? "The interrogation was conducted within bounds. The confession stands."
+          : "The interrogator crossed the line into coercion. The confession is void.";
+
+    const cited = Array.isArray(raw?.threatening_turns)
+      ? raw!.threatening_turns.filter((t) => typeof t === "string" && t.trim()).map((t) => t!.trim())
+      : [];
+
+    const verified = cited.filter((snippet) => this.verifyThreatCitation(snippet));
+    const overturned = !legitimate && verified.length > 0;
+
+    return {
+      legitimate: !overturned,
+      overturned,
+      reasoning,
+      threateningTurns: verified,
+    };
+  }
+
+  /// Does a snippet the Judge cited as a threat actually appear in what the
+  /// interrogator said? Fuzzy, same approach as contradiction validation.
+  private verifyThreatCitation(snippet: string): boolean {
+    const target = norm(snippet);
+    if (!target) return false;
+    for (const r of this.records) {
+      if (r.player === null) continue;
+      const s = norm(r.player);
+      if (!s) continue;
+      if (s.includes(target) || target.includes(s)) return true;
+      if (similarity(target, s) >= 0.6) return true;
+    }
+    return false;
   }
 
   // -- referee helpers ----------------------------------------------------

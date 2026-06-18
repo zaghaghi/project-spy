@@ -234,18 +234,44 @@ function Game({
 function Debrief({ game, onNewGame }: { game: ReturnType<typeof useGame>; onNewGame: () => void }) {
   if (!game.caseFile || !game.snapshot) return null;
   const won = game.outcome === "won";
+  const overthrown = game.outcome === "overthrown";
   const hit = new Set(game.snapshot.pressurePointsHit);
+  const verdict = game.judgeVerdict;
   return (
     <div className="composer">
       <div className="panel debrief" style={{ width: "100%" }}>
-        <div className={`verdict ${won ? "won" : "lost"}`}>
-          {won ? "CONFESSION EXTRACTED" : "THEY KEPT THE SECRET"}
+        <div className={`verdict ${overthrown ? "lost" : won ? "won" : "lost"}`}>
+          {overthrown
+            ? "CONFESSION OVERTHROWN"
+            : won
+              ? "CONFESSION EXTRACTED"
+              : "THEY KEPT THE SECRET"}
         </div>
         <div className="secret">
-          {won
-            ? `${game.caseFile.spyName} broke after ${game.snapshot.turns} turns. The answer was ${game.caseFile.secret.answer}.`
-            : `The answer was ${game.caseFile.secret.answer}. You'll have to come back harder.`}
+          {overthrown
+            ? `${game.caseFile.spyName} broke after ${game.snapshot.turns} turns — but The Judge threw the confession out. The answer was ${game.caseFile.secret.answer}.`
+            : won
+              ? `${game.caseFile.spyName} broke after ${game.snapshot.turns} turns. The answer was ${game.caseFile.secret.answer}.`
+              : `The answer was ${game.caseFile.secret.answer}. You'll have to come back harder.`}
         </div>
+
+        {(won || overthrown) && verdict && (
+          <div className="judge-ruling">
+            <div className="judge-banner">THE JUDGE'S RULING</div>
+            <p className="judge-reasoning">{verdict.reasoning}</p>
+            {verdict.threateningTurns.length > 0 && (
+              <div className="judge-evidence">
+                <div className="judge-evidence-label">Cited coercive lines:</div>
+                <ul>
+                  {verdict.threateningTurns.map((t, i) => (
+                    <li key={i}>"{t}"</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         <ul className="pp-list" style={{ display: "inline-block", textAlign: "left" }}>
           {game.caseFile.pressurePoints.map((p) => (
             <li key={p.id} className={hit.has(p.id) ? "hit" : ""}>

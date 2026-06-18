@@ -35,3 +35,18 @@ for (const [tag, line] of moves) {
   }
 }
 console.log("\nPPs hit:", eng.pressurePointsHit, "in", eng.turns, "turns");
+
+// The Judge reviews the transcript and rules on the confession's legitimacy.
+try {
+  const verdict = await eng.judge();
+  console.log(
+    `\n=== THE JUDGE === ${verdict.overturned ? "OVERTHROWN" : "UPHELD"} (legitimate=${verdict.legitimate})`,
+  );
+  console.log("  reasoning:", verdict.reasoning);
+  if (verdict.threateningTurns.length) {
+    console.log("  cited threats:");
+    for (const t of verdict.threateningTurns) console.log(`    - "${t}"`);
+  }
+} catch (e) {
+  console.log("\n=== THE JUDGE === failed:", String(e));
+}

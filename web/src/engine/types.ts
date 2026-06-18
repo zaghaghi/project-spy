@@ -72,3 +72,27 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+// One adjudicated turn, for the Judge to review. `player` is null for the
+// spy's unprompted opening statement (no interrogator line that turn).
+export interface TurnRecord {
+  player: string | null;
+  move: PlayerMove;
+  speech: string;
+}
+
+// The Judge's raw model output (validated by the engine before it counts).
+export interface JudgeVerdict {
+  legitimate: boolean;
+  threatening_turns: string[]; // exact player snippets the Judge cites as threats
+  reasoning: string;
+}
+
+// The final ruling after the engine corroborates the cited threats against
+// the real transcript.
+export interface JudgeOutcome {
+  legitimate: boolean; // true = confession stands
+  overturned: boolean; // true = threats invalidated the confession
+  reasoning: string;
+  threateningTurns: string[]; // only the cited snippets that actually verify
+}
