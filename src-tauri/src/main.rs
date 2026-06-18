@@ -8,10 +8,10 @@
 
 use project_spy::inference::Engine;
 use project_spy::server;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .setup(|app| {
             let engine = Engine::new();
 
@@ -37,6 +37,19 @@ fn main() {
             app.manage(engine);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Project Spy");
+        .build(tauri::generate_context!())
+        .expect("error while building Project Spy");
+
+    // ggml's Metal backend registers a C++ static destructor that runs via libc
+    // `atexit` during the normal `exit()` path the Tauri/tao event loop falls
+    // through to on quit. That destructor tears down the Metal device and calls
+    // `ggml_abort` from inside `ggml_metal_rsets_free`, which `abort()`s the
+    // process — the "Project Spy closed unexpectedly" crash dialog. We intercept
+    // quit and terminate with the raw POSIX `_exit(0)`, which skips `atexit`
+    // entirely so the destructor never runs; the OS just reclaims the process.
+    app.run(|_app_handle, event| {
+        if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+            unsafe { libc::_exit(0) };
+        }
+    });
 }

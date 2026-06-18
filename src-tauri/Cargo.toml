@@ -21,6 +21,7 @@ encoding_rs = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 dirs = "5"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+libc = "0.2"
 
 [profile.release]
 opt-level = 3
